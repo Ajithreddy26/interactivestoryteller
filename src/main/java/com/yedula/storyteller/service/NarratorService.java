@@ -27,8 +27,11 @@ public class NarratorService {
 
         String storyContent = story.getContent();
 
-        String prompt = "You are a an interactive story teller narrating this text, you are telling this to a person driving a car, so make it intresting and engaging. Here is the story: " + storyContent;
-
+        String prompt = "You are a an interactive story teller narrating this text, " +
+            "you are telling this to a person driving a car, so make it interesting and engaging. " +
+            "CRITICAL WARNING: Do NOT use stage directions, asterisks, or parentheses. " +
+            "You must only output the exact words you intend to speak out loud. " +
+            "Here is the story: " + storyContent;
 
         return chatModel.call(prompt);
     }
