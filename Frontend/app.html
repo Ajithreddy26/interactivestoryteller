@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Storyteller</title>
+</head>
+<body style="font-family: Arial; padding: 50px; background-color: #121212; color: white;">
+
+    <h1>Library:</h1>
+    <!-- We will inject buttons into this div -->
+    <div id="library-box" style="margin-bottom: 40px;"></div>
+
+    <h1>The AI Narrator:</h1>
+    <!-- We will inject the streaming text here -->
+    <p id="story-box" style="font-size: 24px; line-height: 1.6;"></p>
+
+    <script>
+        const libraryBox = document.getElementById('library-box');
+        const storyBox = document.getElementById('story-box');
+        let currentStream = null; // Keeps track of open connections
+
+        // 1. Fetch the list of DTOs when the page loads
+        fetch('http://localhost:8081/api/stories/all')
+            .then(response => response.json())
+            .then(stories => {
+                stories.forEach(story => {
+                    // Create a button for each story
+                    let btn = document.createElement("button");
+                    btn.innerText = "Play: " + story.title + " by " + story.author;
+                    btn.style = "padding: 10px; margin-right: 10px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px;";
+                    
+                    // Tell the button what to do when clicked
+                    btn.onclick = () => playStory(story.id);
+                    libraryBox.appendChild(btn);
+                });
+            });
+
+        // 2. Play the selected story
+        function playStory(storyId) {
+            storyBox.innerText = "Connecting to AI...\n\n"; // Reset the text
+
+            // Close any currently playing story
+            if (currentStream != null) {
+                currentStream.close();
+            }
+
+            // Open the new SSE stream
+            currentStream = new EventSource('http://localhost:8081/api/stories/start/' + storyId);
+
+            currentStream.onmessage = function(event) {
+                // 1. Unpack the JSON ("data: {"value": " yourself"}")
+                const chunk = JSON.parse(event.data);
+                
+                // 2. Secretly glue it. NO forced spaces needed because the backend protected them!
+                // NOTE: We use chunk.value because your StoryChunkDTO record uses 'String value'
+                storyBox.appendChild(document.createTextNode(chunk.value));
+            };
+
+            currentStream.onerror = function() {
+                currentStream.close(); 
+            };
+        }
+    </script>
+
+</body>
+</html>
