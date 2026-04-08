@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.yedula.storyteller.dto.StoryDTO;
 import com.yedula.storyteller.entity.Story;
 import com.yedula.storyteller.service.NarratorService;
 
@@ -25,7 +26,7 @@ public class StoryController {
     }
 
     @GetMapping("/all")
-    public List<Story> getAllStories(){
+    public List<StoryDTO> getAllStories(){
         return narratorService.getAllStories();
     }
 

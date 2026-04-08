@@ -27,6 +27,8 @@ public class DataSeeder implements CommandLineRunner {
                     "he saw a lady of unparalleled beauty. Enraptured, the King asked her to be his queen. The lady, who was the river goddess Ganga herself in human form, " +
                     "agreed, but on one strict condition: the King must never question any of her actions, no matter how strange they seemed.";
             mahabharata.setContent(epicText);
+            mahabharata.setGenre("Epic/Mythology");
+            mahabharata.setLanguage("Sanskrit/English");
             storyRepository.save(mahabharata);
 
             // Story 2
@@ -38,6 +40,8 @@ public class DataSeeder implements CommandLineRunner {
                     "And God said, 'Let there be light,' and there was light. God saw that the light was good, and he separated the light from the darkness. " +
                     "God called the light 'day,' and the darkness he called 'night.' And there was evening, and there was morning—the first day.";
             genesis.setContent(bibleText);
+            genesis.setGenre("Religious/Mythology");
+            genesis.setLanguage("Hebrew/English");
             storyRepository.save(genesis);
 
             System.out.println("Seeded database with both stories!");

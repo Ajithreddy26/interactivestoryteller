@@ -3,7 +3,10 @@ package com.yedula.storyteller.service;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
+
+import com.yedula.storyteller.dto.StoryDTO;
 import com.yedula.storyteller.entity.Story;
 import com.yedula.storyteller.repository.StoryRepository;
 
@@ -31,8 +34,13 @@ public class NarratorService {
     }
 
     
-    public List<Story> getAllStories(){
-        return storyRepository.findAll();
+    public List<StoryDTO> getAllStories(){
+        List<Story> stories = storyRepository.findAll();
+        List<StoryDTO> storyDTOs = new ArrayList<>();
+        for (Story story : stories) {
+            storyDTOs.add(new StoryDTO(story.getId(), story.getTitle(), story.getAuthor(), story.getGenre(), story.getLanguage()));
+        }
+        return storyDTOs;
     }
     
 }
