@@ -35,5 +35,10 @@ public class StoryController {
         return narratorService.getAllStories();
     }
 
+    @GetMapping(value = "/chat/{id}", produces = org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<StoryChunkDTO> chatWithStory(@PathVariable Long id, String userMessage){
+        return narratorService.chatWithStory(id, userMessage);
+    }
+
     
 }

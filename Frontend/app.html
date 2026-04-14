@@ -1,62 +1,234 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Interactive Storyteller</title>
+    <title>Storyteller</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #f0f0f0;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 { font-size: 20px; color: #aaa; margin-bottom: 16px; }
+
+        #library-box { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 40px; }
+
+        .story-btn {
+            padding: 10px 16px;
+            cursor: pointer;
+            background: #1e1e1e;
+            color: white;
+            border: 1px solid #333;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        .story-btn:hover { background: #2a2a2a; }
+        .story-btn.active { border-color: #007bff; background: #0d2a4a; }
+
+        #controls {
+            display: none;
+            gap: 10px;
+            margin-bottom: 24px;
+            align-items: center;
+        }
+
+        .ctrl-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        #btn-pause  { background: #333; color: white; }
+        #btn-stop   { background: #7b0000; color: white; }
+
+        #status {
+            font-size: 13px;
+            color: #888;
+            margin-left: 8px;
+        }
+
+        #story-box {
+            font-size: 20px;
+            line-height: 1.8;
+            color: #e0e0e0;
+            min-height: 100px;
+        }
+
+        /* Highlight the sentence currently being spoken */
+        .speaking { color: #ffffff; font-weight: bold; }
+    </style>
 </head>
-<body style="font-family: Arial; padding: 50px; background-color: #121212; color: white;">
+<body>
 
-    <h1>Library:</h1>
-    <!-- We will inject buttons into this div -->
-    <div id="library-box" style="margin-bottom: 40px;"></div>
+    <h1>Library</h1>
+    <div id="library-box"></div>
 
-    <h1>The AI Narrator:</h1>
-    <!-- We will inject the streaming text here -->
-    <p id="story-box" style="font-size: 24px; line-height: 1.6;"></p>
+    <div id="controls">
+        <button class="ctrl-btn" id="btn-pause" onclick="togglePause()">⏸ Pause</button>
+        <button class="ctrl-btn" id="btn-stop"  onclick="stopStory()">⏹ Stop</button>
+        <span id="status">Connecting...</span>
+    </div>
+
+    <h1 style="margin-bottom: 16px;">Narrator</h1>
+    <p id="story-box"></p>
 
     <script>
         const libraryBox = document.getElementById('library-box');
-        const storyBox = document.getElementById('story-box');
-        let currentStream = null; // Keeps track of open connections
+        const storyBox   = document.getElementById('story-box');
+        const controls   = document.getElementById('controls');
+        const status     = document.getElementById('status');
+        const btnPause   = document.getElementById('btn-pause');
 
-        // 1. Fetch the list of DTOs when the page loads
+        let currentStream = null;
+        let activeBtn     = null;
+        let isPaused      = false;
+
+        // --- TTS engine ---
+        // Tokens arrive fast and tiny. We buffer them and only speak
+        // when we have a complete sentence (ends with . ! or ?)
+        let tokenBuffer  = '';
+        const speakQueue = [];   // sentences waiting to be spoken
+        let isSpeaking   = false;
+
+        // Sentence-ending punctuation followed by space or end-of-string
+        const SENTENCE_END = /([.!?])\s+|([.!?])$/;
+
+        function flushBuffer(force = false) {
+            // Split buffer on sentence boundaries
+            let remaining = tokenBuffer;
+            let match;
+
+            while ((match = SENTENCE_END.exec(remaining)) !== null) {
+                const sentence = remaining.slice(0, match.index + 1).trim();
+                remaining = remaining.slice(match.index + match[0].length);
+                if (sentence) speakQueue.push(sentence);
+            }
+
+            tokenBuffer = remaining;
+
+            // If stream ended, speak whatever is left
+            if (force && tokenBuffer.trim()) {
+                speakQueue.push(tokenBuffer.trim());
+                tokenBuffer = '';
+            }
+
+            drainQueue();
+        }
+
+        function drainQueue() {
+            if (isSpeaking || speakQueue.length === 0) return;
+            if (isPaused) return;
+
+            const sentence = speakQueue.shift();
+            const utterance = new SpeechSynthesisUtterance(sentence);
+            utterance.rate  = 0.92;   // slightly slower — easier to follow while driving
+            utterance.pitch = 1.0;
+
+            utterance.onstart = () => {
+                isSpeaking = true;
+                setStatus('Narrating...');
+            };
+            utterance.onend = () => {
+                isSpeaking = false;
+                drainQueue();           // speak the next sentence
+            };
+            utterance.onerror = () => {
+                isSpeaking = false;
+                drainQueue();
+            };
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // --- Playback controls ---
+
+        function togglePause() {
+            if (isPaused) {
+                isPaused = false;
+                window.speechSynthesis.resume();
+                btnPause.textContent = '⏸ Pause';
+                setStatus('Narrating...');
+                drainQueue();
+            } else {
+                isPaused = true;
+                window.speechSynthesis.pause();
+                btnPause.textContent = '▶ Resume';
+                setStatus('Paused');
+            }
+        }
+
+        function stopStory() {
+            if (currentStream) { currentStream.close(); currentStream = null; }
+            window.speechSynthesis.cancel();
+            speakQueue.length = 0;
+            tokenBuffer  = '';
+            isSpeaking   = false;
+            isPaused     = false;
+            controls.style.display = 'none';
+            btnPause.textContent   = '⏸ Pause';
+            if (activeBtn) { activeBtn.classList.remove('active'); activeBtn = null; }
+            setStatus('');
+        }
+
+        function setStatus(msg) { status.textContent = msg; }
+
+        // --- Library ---
+
         fetch('http://localhost:8081/api/stories/all')
-            .then(response => response.json())
+            .then(r => r.json())
             .then(stories => {
                 stories.forEach(story => {
-                    // Create a button for each story
-                    let btn = document.createElement("button");
-                    btn.innerText = "Play: " + story.title + " by " + story.author;
-                    btn.style = "padding: 10px; margin-right: 10px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px;";
-                    
-                    // Tell the button what to do when clicked
-                    btn.onclick = () => playStory(story.id);
+                    const btn = document.createElement('button');
+                    btn.className   = 'story-btn';
+                    btn.textContent = story.title + ' — ' + story.author;
+                    btn.onclick     = () => playStory(story.id, btn);
                     libraryBox.appendChild(btn);
                 });
             });
 
-        // 2. Play the selected story
-        function playStory(storyId) {
-            storyBox.innerText = "Connecting to AI...\n\n"; // Reset the text
+        // --- Play ---
 
-            // Close any currently playing story
-            if (currentStream != null) {
-                currentStream.close();
-            }
+        function playStory(storyId, btn) {
+            // Reset everything
+            stopStory();
 
-            // Open the new SSE stream
+            storyBox.textContent = '';
+            activeBtn = btn;
+            btn.classList.add('active');
+            controls.style.display = 'flex';
+            setStatus('Connecting...');
+
             currentStream = new EventSource('http://localhost:8081/api/stories/start/' + storyId);
 
             currentStream.onmessage = function(event) {
-                // 1. Unpack the JSON ("data: {"value": " yourself"}")
                 const chunk = JSON.parse(event.data);
-                
-                // 2. Secretly glue it. NO forced spaces needed because the backend protected them!
-                // NOTE: We use chunk.value because your StoryChunkDTO record uses 'String value'
-                storyBox.appendChild(document.createTextNode(chunk.value));
+                const token = chunk.value || '';
+
+                // 1. Show text on screen
+                storyBox.appendChild(document.createTextNode(token));
+
+                // 2. Add to TTS buffer and try to flush complete sentences
+                tokenBuffer += token;
+                flushBuffer();
+
+                setStatus('Narrating...');
             };
 
             currentStream.onerror = function() {
-                currentStream.close(); 
+                // Stream finished — speak any remaining buffered text
+                flushBuffer(true);
+                currentStream.close();
+                currentStream = null;
+                setStatus(speakQueue.length > 0 || isSpeaking ? 'Finishing...' : 'Done');
             };
         }
     </script>

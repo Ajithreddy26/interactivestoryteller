@@ -1,8 +1,10 @@
 package com.yedula.storyteller.service;
 
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -19,33 +21,47 @@ import reactor.core.publisher.Flux;
 public class NarratorService {
 
     private final StoryRepository storyRepository;
-    private final ChatModel chatModel;
+    private final ChatClient chatClient;
 
-    public NarratorService(StoryRepository storyRepository, ChatModel chatModel) {
+    public NarratorService(StoryRepository storyRepository, ChatModel chatModel, ChatMemory chatMemory) {
         this.storyRepository = storyRepository;
-        this.chatModel = chatModel;
+        
+        this.chatClient = ChatClient.builder(chatModel)
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .build();
     }
 
     public Flux<StoryChunkDTO> startStory(Long storyId){
         Story story = storyRepository.findById(storyId).orElseThrow(() -> new RuntimeException("Story not found"));   
-        String promptText = "You are an interactive storyteller narrating this text, " +
-            "you are telling this to a person driving a car, so make it interesting and engaging. " +
-            "CRITICAL WARNING: Do NOT use stage directions, asterisks, or parentheses. " +
-            "You must only output the exact words you intend to speak out loud. " +
-            "Here is the story: " + story.getContent();
-        // 1. Tell Olamma to start generating the story stream
-        Flux<ChatResponse> aiStream = chatModel.stream(new Prompt(promptText));
-        // 2. As each token comes out of the AI, grab the text and package it into our DTO
+
+        Flux<ChatResponse> aiStream = chatClient.prompt()
+                .system("You are an interactive storyteller narrating a text. " +
+                        "CRITICAL WARNING: Do NOT use stage directions, asterisks, or parentheses. " +
+                        "You must only output the exact words you intend to speak out loud.")
+                .user("Here is the story: " + story.getContent())
+                .advisors(advisor -> advisor.param("chat_memory_conversation_id", storyId.toString()))
+                .stream()
+                .chatResponse();
+
         return aiStream.map(response -> {
             String token = response.getResult().getOutput().getText();
             
-            // Protect against empty tokens at the end of the stream
+
             if (token == null) {
                 return new StoryChunkDTO(""); 
             }
             
             return new StoryChunkDTO(token);
         });
+    }
+
+    public Flux<StoryChunkDTO> chatWithStory(Long storyId, String userMessage){
+        return chatClient.prompt()
+                        .user(userMessage)
+                        .advisors(advisor -> advisor.param("chat_memory_conversation_id", storyId.toString()))
+                        .stream()
+                        .chatResponse()
+                        .map(response -> new StoryChunkDTO(response.getResult().getOutput().getText()));
     }
 
 
